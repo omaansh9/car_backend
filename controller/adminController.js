@@ -1,63 +1,87 @@
-const adminModel = require("../models/Admin");
-const sendMail = require("../utils/sendMail");
+const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
-const registerAdmin = async (req, res) => {
-    try {
-        const { email, name, password } = req.body;
-        if (!email || !name || !password) {
-            return res.status(400).json({ message: "All fields are required" });
-        }
+const buildAdminResponse = admin => ({
+  id: admin._id,
+  email: admin.email,
+  name: admin.name,
+  role: admin.role,
+});
 
-        const existingAdmin = await adminModel.findOne({ email });
-        if (existingAdmin) {
-            return res.status(400).json({ message: "Admin with this email already exists" });
-        }
-        
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newAdmin = new adminModel({ email, name, password: hashedPassword });
-        await newAdmin.save();
-        // await sendMail(
-        //         email,
-        //         'Admin Registration Successful',
-        //         `
-        //         <h2>Welcome Admin</h2>
-        //         <p>Hello ${name},</p>
-        //         <p>Your admin account has been created successfully.</p>
-        //         `
-        // );
-        res.status(201).json({ message: "Admin registered successfully" });
-    } catch (error) {
-        res.status(500).json({ message: "Error registering admin", error });
+const createAdminToken = admin =>
+  jwt.sign(
+    { userId: admin._id, email: admin.email, role: admin.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+  );
+
+const registerAdmin = async (req, res) => {
+  try {
+    const { email, name, password } = req.body;
+    const normalizedEmail = email?.toLowerCase().trim();
+
+    if (!normalizedEmail || !name || !password) {
+      return res.status(400).json({ message: "All fields are required" });
     }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ message: "A user with this email already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const admin = await User.create({
+      email: normalizedEmail,
+      name,
+      password: hashedPassword,
+      role: "admin",
+    });
+
+    res.status(201).json({
+      message: "Admin registered successfully",
+      token: createAdminToken(admin),
+      admin: buildAdminResponse(admin),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error registering admin", error: error.message });
+  }
 };
 
 const loginAdmin = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        if (!email || !password) {
-            return res.status(400).json({ message: "Email and password are required" });
-        }
-        const admin = await adminModel.findOne({ email });
-        if (!admin) {
-            return res.status(400).json({ message: "Invalid email or password" });
-        }
+  try {
+    const { email, password } = req.body;
+    const normalizedEmail = email?.toLowerCase().trim();
 
-        const isMatch = await bcrypt.compare(password, admin.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Invalid email or password" });
-        }
-
-        const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-        res.json({ token, admin: { id: admin._id, email: admin.email, name: admin.name } });
-    } catch (error) {
-        res.status(500).json({ message: "Error logging in admin", error });
+    if (!normalizedEmail || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
     }
+
+    const admin = await User.findOne({ email: normalizedEmail });
+    if (!admin) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    if (admin.role !== "admin") {
+      return res.status(403).json({ message: "This account does not have admin access" });
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    res.json({
+      message: "Admin login successful",
+      token: createAdminToken(admin),
+      admin: buildAdminResponse(admin),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error logging in admin", error: error.message });
+  }
 };
 
-
 module.exports = {
-    registerAdmin,
-    loginAdmin
+  registerAdmin,
+  loginAdmin,
 };

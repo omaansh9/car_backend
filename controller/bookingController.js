@@ -1,13 +1,26 @@
 const Booking = require('../models/Booking');
 const sendMail = require("../utils/sendMail");
 const Car = require('../models/Car');
+const {
+  bookingCreatedEmail,
+  cancellationEmail,
+  refundEmail
+} = require("../utils/emailTemplates");
+
+const syncPaidBookingStatuses = () =>
+  Booking.updateMany(
+    { paymentStatus: 'paid', status: 'pending' },
+    { $set: { status: 'active' } }
+  );
 
 // Get all bookings (admin only)
 const getAllBookings = async (req, res) => {
   try {
+    await syncPaidBookingStatuses();
+
     const bookings = await Booking.find()
-      .populate('userId', 'username email')
-      .populate('carId', 'name brand model')
+      .populate('userId', 'name email')
+      .populate('carId', 'name brand model pricePerDay image')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -27,6 +40,8 @@ const getAllBookings = async (req, res) => {
 // Get user's bookings
 const getUserBookings = async (req, res) => {
   try {
+    await syncPaidBookingStatuses();
+
     const bookings = await Booking.find({ userId: req.user.userId })
       .populate('carId', 'name brand model pricePerDay image')
       .sort({ createdAt: -1 });
@@ -96,7 +111,7 @@ const createBooking = async (req, res) => {
     // Check for booking conflicts
     const conflictingBooking = await Booking.findOne({
       carId,
-      status: 'active',
+      status: { $in: ['pending', 'active'] },
       $or: [
         {
           $and: [
@@ -129,19 +144,15 @@ const createBooking = async (req, res) => {
 
     // Populate booking data
     await booking.populate('carId', 'name brand model pricePerDay image');
-      await sendMail(
-        req.user.email,
-        'Car Booking Confirmed',
-        `
-        <h2>Booking Confirmed</h2>
-        <p>Your booking has been created successfully.</p>
-
-        <p><b>Car:</b> ${car.name}</p>
-        <p><b>From:</b> ${startDate}</p>
-        <p><b>To:</b> ${endDate}</p>
-        <p><b>Total:</b> ₹${totalPrice}</p>
-        `
-      );
+    await sendMail(
+      req.user.email,
+      'LuxeDrive booking request received',
+      bookingCreatedEmail({
+        user: req.user,
+        booking,
+        car
+      })
+    );
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',
@@ -162,7 +173,7 @@ const cancelBooking = async (req, res) => {
     const booking = await Booking.findOne({
       _id: req.params.id,
       userId: req.user.userId,
-      status: 'active'
+      status: { $in: ['pending', 'active'] }
     });
 
     if (!booking) {
@@ -184,17 +195,37 @@ const cancelBooking = async (req, res) => {
       });
     }
 
+    const wasPaid = booking.paymentStatus === 'paid';
+    await booking.populate('carId', 'name brand model pricePerDay image');
+
     booking.status = 'cancelled';
+    if (wasPaid) {
+      booking.paymentStatus = 'refunded';
+    }
     await booking.save();
 
     await sendMail(
       req.user.email,
-      'Booking Cancelled',
-      `
-      <h2>Booking Cancelled</h2>
-      <p>Your booking has been cancelled successfully.</p>
-      `
+      'LuxeDrive booking cancellation confirmed',
+      cancellationEmail({
+        user: req.user,
+        booking,
+        car: booking.carId
+      })
     );
+
+    if (wasPaid) {
+      await sendMail(
+        req.user.email,
+        'LuxeDrive refund processing notification',
+        refundEmail({
+          user: req.user,
+          booking,
+          car: booking.carId,
+          status: 'processing'
+        })
+      );
+    }
 
     res.status(200).json({
       success: true,
@@ -213,7 +244,7 @@ const cancelBooking = async (req, res) => {
 const getBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate('userId', 'username email')
+      .populate('userId', 'name email')
       .populate('carId', 'name brand model pricePerDay image');
 
     if (!booking) {

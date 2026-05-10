@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bookingController = require('../../controller/bookingController');
 const auth = require('../../middleware/auth');
+const { requireAdmin } = require('../../middleware/auth');
 
 /**
  * @swagger
@@ -19,7 +20,7 @@ const auth = require('../../middleware/auth');
  *       500:
  *         description: Server error
  */
-router.get('/all', auth, bookingController.getAllBookings);
+router.get('/all', auth, requireAdmin, bookingController.getAllBookings);
 
 /**
  * @swagger

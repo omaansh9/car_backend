@@ -16,4 +16,13 @@ const auth = (req, res, next) => {
   }
 };
 
+const requireAdmin = (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+
+  next();
+};
+
 module.exports = auth;
+module.exports.requireAdmin = requireAdmin;

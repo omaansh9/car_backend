@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const carController = require('../../controller/carController');
 const auth = require('../../middleware/auth');
+const { requireAdmin } = require('../../middleware/auth');
 
 /**
  * @swagger
@@ -83,7 +84,7 @@ router.get('/:id', carController.getCar);
  *       500:
  *         description: Server error
  */
-router.post('/', auth, carController.addCar);
+router.post('/', auth, requireAdmin, carController.addCar);
 
 /**
  * @swagger
@@ -128,7 +129,7 @@ router.post('/', auth, carController.addCar);
  *       500:
  *         description: Server error
  */
-router.put('/:id', auth, carController.updateCar);
+router.put('/:id', auth, requireAdmin, carController.updateCar);
 
 /**
  * @swagger
@@ -154,6 +155,6 @@ router.put('/:id', auth, carController.updateCar);
  *       500:
  *         description: Server error
  */
-router.delete('/:id', auth, carController.deleteCar);
+router.delete('/:id', auth, requireAdmin, carController.deleteCar);
 
 module.exports = router;

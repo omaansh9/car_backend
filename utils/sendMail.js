@@ -1,7 +1,7 @@
 const nodemailer = require('nodemailer');
 
-const EMAIL_USER = "omaansh9@gmail.com";
-const EMAIL_PASS = "zpxltwfeycissagn";
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_SERVICE = process.env.EMAIL_SERVICE;
 const EMAIL_HOST = process.env.EMAIL_HOST;
 const EMAIL_PORT = process.env.EMAIL_PORT ? parseInt(process.env.EMAIL_PORT, 10) : 587;
@@ -47,22 +47,25 @@ const createTransporter = async () => {
   });
 }
 
-const sendMail = async (to, subject, html) => {
+const sendMail = async (to, subject, html, attachments = []) => {
   try {
     const transporter = await createTransporter();
     const info = await transporter.sendMail({
       from: EMAIL_USER ? EMAIL_USER : 'LuxeDrive <no-reply@luxedrive.test>',
       to,
       subject,
-      html
+      html,
+      attachments
     });
 
     console.log('Email sent successfully to', to);
     if (!EMAIL_USER) {
       console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
     }
+    return info;
   } catch (error) {
     console.error('Email sending failed:', error);
+    return null;
   }
 };
 

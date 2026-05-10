@@ -25,8 +25,25 @@ const bookingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'cancelled', 'completed'],
-    default: 'active'
+    enum: ['pending', 'active', 'cancelled', 'completed'],
+    default: 'pending'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  stripePaymentIntentId: {
+    type: String
+  },
+  stripeChargeId: {
+    type: String
+  },
+  paidAt: {
+    type: Date
+  },
+  invoiceEmailSentAt: {
+    type: Date
   },
   createdAt: {
     type: Date,
